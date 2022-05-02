@@ -13,6 +13,7 @@ public class ChatClient {
     private Socket socket;
     private DataInputStream in;
     private DataOutputStream out;
+    private ChatHistory history;
 
     private final Controller controller;
 
@@ -24,9 +25,11 @@ public class ChatClient {
         socket = new Socket("localhost", 8189);
         in = new DataInputStream(socket.getInputStream());
         out = new DataOutputStream(socket.getOutputStream());
+        history = new ChatHistory();
         final Thread readThread = new Thread(() -> {
             try {
                 waitAuthenticate();
+                restoreHistory();
                 readMessage();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -37,6 +40,10 @@ public class ChatClient {
         readThread.setDaemon(true);
         readThread.start();
 
+    }
+
+    private void restoreHistory() throws IOException {
+            controller.addMessage(history.getHistory(100));
     }
 
     private void readMessage() throws IOException {
@@ -60,6 +67,7 @@ public class ChatClient {
                 }
             }
             controller.addMessage(message);
+            history.logger(message);
         }
     }
 
@@ -111,6 +119,7 @@ public class ChatClient {
         try {
             System.out.println("Send message: " + message);
             out.writeUTF(message);
+            history.logger(message);
         } catch (IOException e) {
             e.printStackTrace();
         }
