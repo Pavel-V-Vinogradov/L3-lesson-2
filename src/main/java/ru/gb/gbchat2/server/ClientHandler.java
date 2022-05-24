@@ -1,13 +1,14 @@
 package ru.gb.gbchat2.server;
 
+import ru.gb.gbchat2.Command;
+
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
-
-import ru.gb.gbchat2.Command;
-
-import static java.lang.Thread.sleep;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class ClientHandler {
     private final Socket socket;
@@ -17,6 +18,7 @@ public class ClientHandler {
     private final AuthService authService;
     public static final int TIMEOUT = 5000;
     boolean isTimeoutExpired = false;
+    ExecutorService executorService = Executors.newFixedThreadPool(10);
 
     private String nick;
 
@@ -29,16 +31,14 @@ public class ClientHandler {
             this.out = new DataOutputStream(socket.getOutputStream());
             this.authService = authService;
 
-            new Thread(() -> {
+            executorService.execute(() -> {
                 try {
                     authenticate();
-                    if (!isTimeoutExpired) {
-                        readMessages();
-                    }
+                    readMessages();
                 } finally {
                     closeConnection();
                 }
-            }).start();
+            });
 
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -70,13 +70,23 @@ public class ClientHandler {
         } catch (IOException e) {
             e.printStackTrace();
         }
+        if (executorService != null) {
+            executorService.shutdown();
+            try {
+                if (executorService.awaitTermination(TIMEOUT, TimeUnit.MILLISECONDS)) {
+                    executorService.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     private void authenticate() {
         while (true) {
             try {
                 final String str = in.readUTF();
-                if(isTimeoutExpired) {
+                if (isTimeoutExpired) {
                     sendMessage(Command.ERROR, "Соединение закрыто сервером по таймауту");
                     break;
                 }
